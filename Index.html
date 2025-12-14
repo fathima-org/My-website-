@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Maven by Fathima Muazza - 20,000 Product Catalog (Brown Theme)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Lucide Icons for better UI elements -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom styles for aesthetic font and subtle shadow */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FAF7F5; /* Soft cream background */
+        }
+        .product-card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+            transition: all 0.3s ease-in-out;
+        }
+        .product-card-shadow:hover:not(.out-of-stock) {
+            transform: translateY(-5px);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+        }
+        .out-of-stock {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(100%);
+        }
+        .sale-badge {
+            background-color: #ef4444; /* Red for Sale */
+        }
+        /* Style for the step indicator, using the new secondary color */
+        .step-active .step-number {
+            background-color: #B87333; /* Terracotta secondary color */
+            color: white;
+            border-color: #B87333;
+        }
+        .step-active .step-title {
+            color: #B87333;
+            font-weight: 600;
+        }
+    </style>
+    <script>
+        // Custom Tailwind Configuration with Brown/Earthy Tones
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4A3026', // Deep Coffee Brown
+                        secondary: '#B87333', // Warm Terracotta
+                        accent: '#f59e0b', // Amber (for Gift/Special - kept for visibility)
+                        success: '#10B981', // Green for success messages
+                        error: '#EF4444' // Red for errors
+                    },
+                }
+            }
+        }
+    </script>
+    <script>
+        // --- GLOBAL STATE ---
+        let cart = {}; 
+        let checkoutStep = 0; 
+        let shippingDetails = {
+            fullName: 'Jane Doe',
+            address: '123, Model Town, Near SBI',
+            city: 'New Delhi',
+            zip: '110001',
+            phoneNumber: '9876543210'
+        };
+        const SHIPPING_COST = 500;
+        const MIN_FREE_SHIPPING = 50000;
+        const GIFT_THRESHOLD = 50000;
+        const PRODUCT_COUNT = 20000; // Updated total number of products
+
+        // Mock data generator utilities
+        const CATEGORIES = ["Saree", "Lehenga", "Dress", "Shoes", "Bags", "Electronics", "Gadgets", "Home Supplies", "Books", "Stationary", "Toys", "Craft Material", "Medicine Pouch", "Pencil Box"];
+        const BASE_PRICES = {
+            Saree: 15000, Lehenga: 150000, Dress: 4000, Shoes: 4000, Bags: 3000, Electronics: 30000, Gadgets: 5000,
+            'Home Supplies': 7000, Books: 800, Stationary: 500, Toys: 1500, 'Craft Material': 2000, 
+            'Medicine Pouch': 500, 'Pencil Box': 300
+        };
+        const PREFIXES = ["Premium", "Eco-friendly", "Urban", "Classic", "Portable", "Smart", "Deluxe", "Vintage", "Handcrafted", "Essential", "Professional"];
+        const SUFFIXES = ["Model X", "V2.0", "Set", "Kit", "Pro", "Edition", "Max", "Mini", "Luxe", "Standard"];
+        const ADJECTIVES = ["Stylish", "Durable", "Comfortable", "High-Quality", "Lightweight", "Intricate", "Modern", "Traditional"];
+        
+        // Function to generate 20,000 mock products
+        const generateMockProducts = (count) => {
+            const products = [];
+            for (let i = 1; i <= count; i++) {
+                const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+                const prefix = PREFIXES[Math.floor(Math.random() * PREFIXES.length)];
+                const suffix = SUFFIXES[Math.floor(Math.random() * SUFFIXES.length)];
+                const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+                
+                // Base price calculation with a random multiplier for variance
+                let base = BASE_PRICES[category] || 1000;
+                base = Math.round((base + (Math.random() * base * 0.5 - base * 0.25)) / 100) * 100; // Round to nearest 100
+
+                // Generate offer price (20% chance of no offer, 80% chance of 10-30% discount)
+                let offerPrice = null;
+                if (Math.random() < 0.8) {
+                    const discount = Math.random() * 0.2 + 0.1; // 10% to 30% discount
+                    offerPrice = Math.round((base * (1 - discount)) / 10) * 10; // Round to nearest 10
+                }
+                
+                // Stock status (95% in stock)
+                const stock = Math.random() < 0.95;
+                
+                // Placeholder image based on category
+                const imagePlaceholder = `https://placehold.co/400x300/${Math.floor(Math.random()*16777215).toString(16)}/ffffff?text=${category.replace(' ', '+')}`;
+                
+                products.push({
+                    id: i,
+                    name: `${prefix} ${category} ${suffix} ${i}`,
+                    price: base,
+                    offerPrice: offerPrice,
+                    image: imagePlaceholder,
+                    stock: stock,
+                    gift: base >= GIFT_THRESHOLD,
+                    description: `${adjective} item from the ${category} collection. Perfect for professional use. (ID: ${i})`
+                });
+            }
+            return products;
+        };
+        
+        // Generate the 20,000+ products
+        const productsData = generateMockProducts(PRODUCT_COUNT);
+
+
+        // --- UTILITY FUNCTIONS ---
+
+        // Function to format price as Indian Rupees (₹)
+        const formatCurrency = (amount) => {
+            if (amount === null || amount === undefined) return '';
+            return new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                maximumFractionDigits: 0
+            }).format(amount);
+        };
+
+        const calculateDiscount = (original, offer) => {
+            if (!offer || original <= offer) return 0;
+            return Math.round(((original - offer) / original) * 100);
+        };
+
+        const getProductPrice = (product) => {
+            return product.offerPrice || product.price;
+        };
+
+        // Simple custom alert/message box function (replaces alert())
+        const alertMessage = (message, type = 'info') => {
+            const messageBox = document.getElementById('message-box');
+            
+            let icon = 'info', color = 'bg-blue-500';
+            if (type === 'success') { icon = 'check-circle'; color = 'bg-success'; }
+            if (type === 'error') { icon = 'alert-triangle'; color = 'bg-error'; }
+
+            messageBox.innerHTML = `
+                <div class="max-w-md mx-auto p-4 rounded-xl shadow-2xl flex items-center space-x-4 border-l-8 ${color} bg-white">
+                    <i data-lucide="${icon}" class="w-6 h-6 ${type === 'success' ? 'text-success' : 'text-primary'}"></i>
+                    <p class="text-gray-700 font-medium flex-grow">${message}</p>
+                    <button onclick="document.getElementById('message-box').classList.add('hidden')" class="ml-auto text-gray-400 hover:text-gray-600 font-bold">&times;</button>
+                </div>
+            `;
+            lucide.createIcons();
+            messageBox.classList.remove('hidden');
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 6000);
+        };
+
+        // --- CART LOGIC ---
+
+        const updateCartCount = () => {
+            const count = Object.values(cart).reduce((total, item) => total + item.quantity, 0);
+            document.getElementById('cart-count').textContent = count;
+        };
+
+        const addToCart = (productId) => {
+            const product = productsData.find(p => p.id === productId);
+            if (!product || !product.stock) return;
+
+            const existingItem = cart[productId];
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                // Find the full product object from the large array
+                const fullProduct = productsData.find(p => p.id === productId); 
+                cart[productId] = {
+                    ...fullProduct,
+                    quantity: 1
+                };
+            }
+
+            updateCartCount();
+            alertMessage(`${product.name} added to cart!`, 'success');
+        };
+
+        const updateCartItemQuantity = (productId, change) => {
+            const item = cart[productId];
+            if (!item) return;
+
+            item.quantity += change;
+
+            if (item.quantity <= 0) {
+                delete cart[productId];
+            }
+
+            if (checkoutStep >= 1) {
+                renderContent(); // Re-render content if in cart/checkout
+            }
+            updateCartCount();
+        };
+        
+        const calculateTotals = () => {
+            let subtotal = 0;
+            let giftCount = 0;
+            Object.values(cart).forEach(item => {
+                subtotal += getProductPrice(item) * item.quantity;
+                // Check if item original price qualifies for gift threshold
+                if (item.price >= GIFT_THRESHOLD && item.stock) { 
+                    giftCount += item.quantity;
+                }
+            });
+
+            const isFreeShipping = subtotal >= MIN_FREE_SHIPPING;
+            const shipping = isFreeShipping ? 0 : SHIPPING_COST;
+            const grandTotal = subtotal + shipping;
+
+            return { subtotal, shipping, grandTotal, giftCount, isFreeShipping };
+        };
+
+
+        // --- UI RENDERING (Checkout Steps) ---
+
+        const setCheckoutStep = (step) => {
+            checkoutStep = step;
+            renderContent();
+        };
+        
+        const renderContent = () => {
+             const mainContent = document.getElementById('main-content');
+            mainContent.innerHTML = ''; // Clear main content
+
+            // Update step indicators
+            document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('step-active'));
+            if (checkoutStep > 0 && checkoutStep < 4) {
+                document.getElementById(`step-${checkoutStep}`).classList.add('step-active');
+            } else if (checkoutStep === 4) {
+                // Keep all steps visually completed for success page
+                document.getElementById('step-1').classList.add('step-active');
+                document.getElementById('step-2').classList.add('step-active');
+                document.getElementById('step-3').classList.add('step-active');
+            }
+
+            switch (checkoutStep) {
+                case 0:
+                    renderProducts();
+                    break;
+                case 1:
+                    renderCart();
+                    break;
+                case 2:
+                    renderShippingForm();
+                    break;
+                case 3:
+                    renderPaymentMethod();
+                    break;
+                case 4:
+                    renderSuccessPage();
+                    break;
+            }
+        }
+
+
+        // --- STEP 0: PRODUCT GRID ---
+
+        const createProductCard = (product) => {
+            const isOutOfStock = !product.stock;
+            // Gift logic based on original price
+            const hasGift = product.price >= GIFT_THRESHOLD; 
+            const isSale = product.offerPrice && product.offerPrice < product.price;
+            const displayPrice = getProductPrice(product);
+            const originalPrice = product.price;
+            const discountPercent = isSale ? calculateDiscount(originalPrice, product.offerPrice) : 0;
+
+            let cardClasses = `bg-white rounded-xl overflow-hidden product-card-shadow relative flex flex-col`;
+            if (isOutOfStock) {
+                cardClasses += ' out-of-stock';
+            }
+
+            const cardHtml = `
+                <div class="${cardClasses}">
+                    <!-- Badges Container -->
+                    <div class="absolute top-0 right-0 flex space-x-0.5 z-10">
+                        ${hasGift && !isOutOfStock ? `
+                            <div class="bg-accent text-white px-3 py-1 text-xs font-bold rounded-bl-lg shadow-lg">
+                                🎁 PREMIUM GIFT
+                            </div>
+                        ` : ''}
+                        ${isSale && !isOutOfStock ? `
+                            <div class="sale-badge text-white px-3 py-1 text-xs font-bold rounded-bl-lg shadow-lg">
+                                SAVE ${discountPercent}%
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <!-- Out of Stock Overlay -->
+                    ${isOutOfStock ? `
+                        <div class="absolute inset-0 bg-gray-900/60 flex items-center justify-center z-20">
+                            <span class="text-white text-2xl font-extrabold tracking-widest p-4 border-4 border-white rounded-lg rotate-12 transform">SOLD OUT</span>
+                        </div>
+                    ` : ''}
+
+                    <!-- Image Section -->
+                    <div class="h-48 overflow-hidden bg-gray-100">
+                        <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover" loading="lazy" onerror="this.onerror=null;this.src='https://placehold.co/400x300/ccc/000?text=Image+Unavailable';">
+                    </div>
+
+                    <!-- Content Section -->
+                    <div class="p-6 flex-grow flex flex-col justify-between">
+                        <h2 class="text-xl font-bold text-gray-900 mb-2">${product.name}</h2>
+                        <p class="text-gray-500 text-sm mb-4 line-clamp-2">${product.description}</p>
+                        
+                        <!-- Price and Stock Status -->
+                        <div class="flex flex-col items-start mb-4">
+                            <!-- Original Price (Cut) -->
+                            ${isSale ? `
+                                <span class="text-sm text-gray-500 line-through mb-1">
+                                    MRP: ${formatCurrency(originalPrice)}
+                                </span>
+                            ` : ''}
+                            
+                            <!-- Display Price (Prominent) -->
+                            <div class="flex items-end justify-between w-full">
+                                <span class="text-3xl font-extrabold ${isOutOfStock ? 'text-gray-400' : 'text-primary'}">
+                                    ${formatCurrency(displayPrice)}
+                                </span>
+                                
+                                <span class="text-xs font-semibold p-1.5 rounded-full ${isOutOfStock ? 'bg-red-100 text-error' : 'bg-success/10 text-success'}">
+                                    ${isOutOfStock ? 'Unavailable' : 'In Stock'}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Action Button -->
+                        <button 
+                            class="w-full py-3 rounded-lg font-semibold transition duration-200 ease-in-out 
+                                ${isOutOfStock 
+                                    ? 'bg-gray-300 text-gray-600 cursor-not-allowed' 
+                                    : 'bg-secondary text-white hover:bg-secondary/90 active:bg-secondary/80 shadow-md hover:shadow-lg'
+                                }"
+                            ${isOutOfStock ? 'disabled' : ''}
+                            onclick="${isOutOfStock ? `alertMessage('Item is currently out of stock.', 'info')` : `addToCart(${product.id})`}"
+                        >
+                            ${isOutOfStock ? 'Notify Me When Back' : 'Add to Cart'}
+                        </button>
+                    </div>
+                </div>
+            `;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'col-span-1';
+            wrapper.innerHTML = cardHtml;
+            return wrapper;
+        };
+        
+        // Function to filter products and re-render the grid
+        const filterProducts = (query) => {
+            const container = document.getElementById('product-grid');
+            const normalizedQuery = query.toLowerCase().trim();
+            container.innerHTML = ''; // Clear existing cards
+            
+            // We limit the visible results to 100 for performance reasons in the UI
+            const MAX_DISPLAY_RESULTS = 100;
+            let resultCount = 0;
+
+            const filteredProducts = productsData.filter(product => {
+                // Optimization: Stop searching once we have enough to display
+                if (resultCount >= MAX_DISPLAY_RESULTS && normalizedQuery !== '') {
+                    return false;
+                }
+                
+                let matches = false;
+                if (normalizedQuery === '') {
+                    // Always show the first few products if the search is empty
+                    matches = product.id <= 6; 
+                } else {
+                    // Check if query matches product name or description
+                    matches = product.name.toLowerCase().includes(normalizedQuery) ||
+                              product.description.toLowerCase().includes(normalizedQuery);
+                }
+
+                if (matches) {
+                    resultCount++;
+                }
+                return matches;
+            });
+            
+            if (resultCount === 0 && normalizedQuery !== '') {
+                 container.innerHTML = `
+                    <div class="col-span-full text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 shadow-inner">
+                        <i data-lucide="search-x" class="w-16 h-16 mx-auto text-gray-400 mb-4"></i>
+                        <p class="text-xl font-semibold text-gray-600">No products found matching "${query}".</p>
+                        <p class="text-sm text-gray-500">Try searching for categories like 'Saree', 'Lehenga', or 'Electronics'.</p>
+                    </div>
+                `;
+            } else {
+                // Displaying the filtered products (max 100 results)
+                filteredProducts.slice(0, MAX_DISPLAY_RESULTS).forEach(product => {
+                    container.appendChild(createProductCard(product));
+                });
+                
+                if (resultCount > MAX_DISPLAY_RESULTS) {
+                    const message = document.createElement('div');
+                    message.className = 'col-span-full text-center mt-4 text-sm text-gray-500';
+                    message.innerHTML = `Displaying the first ${MAX_DISPLAY_RESULTS} matches out of approximately ${resultCount} found in the catalog. Refine your search for better results.`;
+                    container.appendChild(message);
+                }
+            }
+            lucide.createIcons(); // Re-initialize icons for new content
+        };
+
+        const renderProducts = () => {
+            const mainContent = document.getElementById('main-content');
+            mainContent.innerHTML = `
+                <div class="text-center mb-8">
+                    <h1 class="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-3">🛍️ Massive Catalog (${PRODUCT_COUNT}+ Items) 🛍️</h1>
+                    <p class="text-lg text-gray-600 max-w-2xl mx-auto">Welcome to the **Market Maven by Fathima Muazza** bazaar! Search f
